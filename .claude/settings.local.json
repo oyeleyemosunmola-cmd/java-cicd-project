@@ -4,7 +4,11 @@
       "Bash(chmod:*)",
       "Bash(git init:*)",
       "Bash(git config:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Java CI/CD pipeline for WAR deployment on Tomcat\n\n- Terraform: VPC, EC2 instances \\(Jenkins + Tomcat\\), security groups\n- Ansible: Roles for Java, Jenkins, Tomcat configuration\n- GitHub Actions: Terraform apply/destroy workflows with approval\n- Jenkins: Pipeline for build and deploy via SSH\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

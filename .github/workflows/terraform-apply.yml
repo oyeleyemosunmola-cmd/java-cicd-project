@@ -64,6 +64,7 @@ jobs:
       - name: Generate Ansible Inventory
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
+          mkdir -p ../ansible/inventory
           terraform output -raw ansible_inventory > ../ansible/inventory/hosts.ini
 
       - name: Upload Ansible Inventory
