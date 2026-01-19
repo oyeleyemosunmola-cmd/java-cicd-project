@@ -1,15 +1,20 @@
 ---
-# Install Java 11
+# Install Java 17 on Amazon Linux 2 (required for Jenkins)
 
-- name: Install Java {{ java_version }}
+- name: Install Amazon Corretto 17 (Java 17)
   yum:
-    name: "{{ java_package }}"
+    name: java-17-amazon-corretto
     state: present
+
+- name: Find Java 17 installation path
+  shell: dirname $(dirname $(readlink -f $(which java 2>/dev/null || find /usr/lib/jvm -name "java" -path "*17*" -type f 2>/dev/null | head -1)))
+  register: java_home_path
+  changed_when: false
 
 - name: Set JAVA_HOME environment variable
   lineinfile:
     path: /etc/profile.d/java.sh
-    line: "export JAVA_HOME=/usr/lib/jvm/java-{{ java_version }}-openjdk"
+    line: "export JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64"
     create: yes
     mode: '0644'
 
@@ -18,8 +23,14 @@
     path: /etc/profile.d/java.sh
     line: "export PATH=$JAVA_HOME/bin:$PATH"
 
+- name: Register and set Java 17 as default
+  shell: |
+    alternatives --install /usr/bin/java java /usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java 2
+    alternatives --set java /usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java
+  changed_when: true
+
 - name: Verify Java installation
-  command: java -version
+  command: /usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java -version
   register: java_version_result
   changed_when: false
 
