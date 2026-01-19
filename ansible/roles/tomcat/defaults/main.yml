@@ -1,0 +1,19 @@
+---
+# Tomcat role defaults
+tomcat_version: "9.0.85"
+tomcat_user: tomcat
+tomcat_group: tomcat
+tomcat_home: /opt/tomcat
+tomcat_port: 8080
+tomcat_shutdown_port: 8005
+
+# Tomcat manager credentials
+tomcat_admin_username: admin
+tomcat_admin_password: "{{ lookup('env', 'TOMCAT_ADMIN_PASSWORD') | default('admin123', true) }}"
+
+# Deployment user credentials (for Jenkins)
+tomcat_deploy_username: deployer
+tomcat_deploy_password: "{{ lookup('env', 'TOMCAT_DEPLOY_PASSWORD') | default('deployer123', true) }}"
+
+# Jenkins public key (will be set from Jenkins server)
+jenkins_public_key: ""

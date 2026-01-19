@@ -1,0 +1,120 @@
+---
+# Install and configure Jenkins
+
+- name: Add Jenkins repository
+  get_url:
+    url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+    dest: /etc/yum.repos.d/jenkins.repo
+    mode: '0644'
+
+- name: Import Jenkins GPG key
+  rpm_key:
+    key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+    state: present
+
+- name: Install Jenkins
+  yum:
+    name: jenkins
+    state: present
+
+- name: Configure Jenkins port
+  lineinfile:
+    path: /usr/lib/systemd/system/jenkins.service
+    regexp: '^Environment="JENKINS_PORT='
+    line: 'Environment="JENKINS_PORT={{ jenkins_http_port }}"'
+  notify: Reload systemd
+
+- name: Start and enable Jenkins
+  systemd:
+    name: jenkins
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Wait for Jenkins to start
+  wait_for:
+    port: "{{ jenkins_http_port }}"
+    delay: 10
+    timeout: 120
+
+- name: Get Jenkins initial admin password
+  command: cat /var/lib/jenkins/secrets/initialAdminPassword
+  register: jenkins_initial_password
+  changed_when: false
+  ignore_errors: yes
+
+- name: Display Jenkins initial admin password
+  debug:
+    msg: "Jenkins Initial Admin Password: {{ jenkins_initial_password.stdout | default('Password file not found yet') }}"
+  when: jenkins_initial_password.rc == 0
+
+# Install Maven
+- name: Download Maven
+  get_url:
+    url: "https://archive.apache.org/dist/maven/maven-3/{{ maven_version }}/binaries/apache-maven-{{ maven_version }}-bin.tar.gz"
+    dest: "/tmp/apache-maven-{{ maven_version }}-bin.tar.gz"
+    mode: '0644'
+
+- name: Create Maven directory
+  file:
+    path: "{{ maven_home }}"
+    state: directory
+    mode: '0755'
+
+- name: Extract Maven
+  unarchive:
+    src: "/tmp/apache-maven-{{ maven_version }}-bin.tar.gz"
+    dest: "{{ maven_home }}"
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+
+- name: Set Maven environment variables
+  template:
+    src: maven.sh.j2
+    dest: /etc/profile.d/maven.sh
+    mode: '0644'
+
+- name: Create symlink for mvn
+  file:
+    src: "{{ maven_home }}/bin/mvn"
+    dest: /usr/bin/mvn
+    state: link
+
+# Configure SSH for deployment
+- name: Create Jenkins SSH directory
+  file:
+    path: "{{ jenkins_ssh_key_path }}"
+    state: directory
+    owner: "{{ jenkins_user }}"
+    group: "{{ jenkins_group }}"
+    mode: '0700'
+
+- name: Generate SSH key for Jenkins
+  openssh_keypair:
+    path: "{{ jenkins_ssh_key_path }}/id_rsa"
+    type: rsa
+    size: 4096
+    owner: "{{ jenkins_user }}"
+    group: "{{ jenkins_group }}"
+    mode: '0600'
+
+- name: Read Jenkins public key
+  slurp:
+    src: "{{ jenkins_ssh_key_path }}/id_rsa.pub"
+  register: jenkins_public_key
+
+- name: Display Jenkins public key
+  debug:
+    msg: "Jenkins Public Key (add to Tomcat server): {{ jenkins_public_key.content | b64decode }}"
+
+- name: Save Jenkins public key to file for later use
+  copy:
+    content: "{{ jenkins_public_key.content | b64decode }}"
+    dest: /tmp/jenkins_public_key.pub
+    mode: '0644'
+
+# Install Git
+- name: Install Git
+  yum:
+    name: git
+    state: present

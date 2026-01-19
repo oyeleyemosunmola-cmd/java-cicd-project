@@ -1,0 +1,11 @@
+---
+# Jenkins handlers
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart Jenkins
+  systemd:
+    name: jenkins
+    state: restarted

@@ -1,0 +1,110 @@
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type DESTROY to confirm'
+        required: true
+        type: string
+
+env:
+  TF_VERSION: '1.6.0'
+  AWS_REGION: 'us-east-1'
+  TF_WORKING_DIR: 'terraform'
+
+jobs:
+  validate:
+    name: Validate Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "DESTROY" ]; then
+            echo "::error::You must type 'DESTROY' to confirm"
+            exit 1
+          fi
+
+  plan:
+    name: Plan Destroy
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Plan Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "## Resources to be DESTROYED" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          terraform plan -destroy \
+            -var="key_name=${{ secrets.AWS_KEY_NAME }}" \
+            -out=destroy.tfplan 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Destroy Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: destroy-tfplan
+          path: ${{ env.TF_WORKING_DIR }}/destroy.tfplan
+          retention-days: 1
+
+  destroy:
+    name: Destroy Infrastructure
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: production  # <-- Requires approval
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Download Destroy Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: destroy-tfplan
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve destroy.tfplan
+
+      - name: Summary
+        run: |
+          echo "## Infrastructure Destroyed" >> $GITHUB_STEP_SUMMARY
+          echo "Destroyed by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "Time: $(date -u)" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,37 @@
+---
+# Playbook to setup SSH keys between Jenkins and Tomcat
+# Run this AFTER the main playbook has completed
+
+- name: Fetch Jenkins public key
+  hosts: jenkins
+  become: yes
+  tasks:
+    - name: Read Jenkins public key
+      slurp:
+        src: /var/lib/jenkins/.ssh/id_rsa.pub
+      register: jenkins_public_key_content
+
+    - name: Save public key to local file
+      local_action:
+        module: copy
+        content: "{{ jenkins_public_key_content.content | b64decode }}"
+        dest: /tmp/jenkins_public_key.pub
+      become: no
+
+- name: Add Jenkins public key to Tomcat server
+  hosts: tomcat
+  become: yes
+  tasks:
+    - name: Read Jenkins public key from local file
+      set_fact:
+        jenkins_pub_key: "{{ lookup('file', '/tmp/jenkins_public_key.pub') }}"
+
+    - name: Add Jenkins public key to ec2-user authorized_keys
+      authorized_key:
+        user: ec2-user
+        key: "{{ jenkins_pub_key }}"
+        state: present
+
+    - name: Display success message
+      debug:
+        msg: "Jenkins public key has been added to Tomcat server. Jenkins can now deploy via SSH."

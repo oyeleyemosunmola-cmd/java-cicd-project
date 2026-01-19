@@ -1,0 +1,22 @@
+---
+# Main playbook for Java CI/CD infrastructure
+
+- name: Configure Jenkins Server
+  hosts: jenkins
+  become: yes
+  roles:
+    - common
+    - java
+    - jenkins
+  tags:
+    - jenkins
+
+- name: Configure Tomcat Server
+  hosts: tomcat
+  become: yes
+  roles:
+    - common
+    - java
+    - tomcat
+  tags:
+    - tomcat

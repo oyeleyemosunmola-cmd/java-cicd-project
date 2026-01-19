@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Context configuration for Tomcat Manager
+  Allows remote access from Jenkins server
+-->
+<Context antiResourceLocking="false" privileged="true">
+  <CookieProcessor className="org.apache.tomcat.util.http.Rfc6265CookieProcessor"
+                   sameSiteCookies="strict" />
+
+  <!--
+    Allow access from any IP
+    For production, restrict to specific IPs:
+    <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+           allow="127\.\d+\.\d+\.\d+|::1|0:0:0:0:0:0:0:1|JENKINS_IP" />
+  -->
+  <Valve className="org.apache.catalina.valves.RemoteAddrValve"
+         allow=".*" />
+
+  <Manager sessionAttributeValueClassNameFilter="java\.lang\.(?:Boolean|Integer|Long|Number|String)|org\.apache\.catalina\.filters\.CsrfPreventionFilter\$LruCache(?:\$1)?|java\.util\.(?:Linked)?HashMap"/>
+</Context>

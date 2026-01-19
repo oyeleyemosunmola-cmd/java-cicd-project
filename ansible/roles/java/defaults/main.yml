@@ -1,0 +1,4 @@
+---
+# Java role defaults
+java_version: "11"
+java_package: "java-11-openjdk-devel"

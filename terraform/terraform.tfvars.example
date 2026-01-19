@@ -1,0 +1,43 @@
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "dev"
+
+# Project Configuration
+project_name = "java-cicd"
+
+# Network Configuration
+vpc_cidr           = "10.0.0.0/16"
+public_subnet_cidr = "10.0.1.0/24"
+
+# SSH Key Pair (REQUIRED - replace with your key pair name)
+key_name = "your-key-pair-name"
+
+# Security Configuration
+# Restrict to your IP for security: "YOUR_IP/32"
+allowed_ssh_cidr = "0.0.0.0/0"
+
+# Optional: Specify AMI ID (leave empty to use latest Amazon Linux 2)
+ami_id = ""
+
+# EC2 Instances Configuration
+# Customize instance types and volume sizes as needed
+ec2_instances = {
+  jenkins = {
+    instance_type = "t2.medium"
+    volume_size   = 30
+    role          = "jenkins"
+    ports         = [8080]
+  }
+  tomcat = {
+    instance_type = "t2.medium"
+    volume_size   = 20
+    role          = "tomcat"
+    ports         = [8080]
+  }
+}
+
+# Common tags (optional)
+common_tags = {
+  Owner      = "DevOps Team"
+  CostCenter = "Engineering"
+}

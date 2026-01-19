@@ -1,0 +1,67 @@
+// Simplified Jenkinsfile - Uses basic Jenkins without additional plugins
+// Configure TOMCAT_HOST and TOMCAT_SSH_KEY_PATH in Jenkins environment variables
+
+pipeline {
+    agent any
+
+    environment {
+        TOMCAT_HOST = "${env.TOMCAT_HOST ?: 'TOMCAT_IP_HERE'}"
+        TOMCAT_USER = 'ec2-user'
+        TOMCAT_WEBAPPS = '/opt/tomcat/webapps'
+        SSH_KEY = '/var/lib/jenkins/.ssh/id_rsa'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'master',
+                    url: 'https://github.com/LondheShubham153/simple-java-docker.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sh '''
+                    WAR_PATH=$(ls target/*.war | head -1)
+                    WAR_NAME=$(basename $WAR_PATH)
+
+                    # Stop Tomcat
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                        'sudo systemctl stop tomcat || true'
+
+                    # Copy WAR
+                    scp -i $SSH_KEY -o StrictHostKeyChecking=no $WAR_PATH \
+                        ${TOMCAT_USER}@${TOMCAT_HOST}:/tmp/
+
+                    # Deploy and start
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                        "sudo mv /tmp/$WAR_NAME ${TOMCAT_WEBAPPS}/ && \
+                         sudo chown tomcat:tomcat ${TOMCAT_WEBAPPS}/$WAR_NAME && \
+                         sudo systemctl start tomcat"
+                '''
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                sh '''
+                    sleep 10
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                        'curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/'
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

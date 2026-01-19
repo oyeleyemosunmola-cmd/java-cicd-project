@@ -1,0 +1,134 @@
+---
+# Install and configure Apache Tomcat
+
+- name: Create tomcat group
+  group:
+    name: "{{ tomcat_group }}"
+    state: present
+
+- name: Create tomcat user
+  user:
+    name: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+    home: "{{ tomcat_home }}"
+    shell: /bin/false
+    system: yes
+    create_home: no
+
+- name: Create Tomcat home directory
+  file:
+    path: "{{ tomcat_home }}"
+    state: directory
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+    mode: '0755'
+
+- name: Download Tomcat
+  get_url:
+    url: "https://archive.apache.org/dist/tomcat/tomcat-9/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz"
+    dest: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
+    mode: '0644'
+
+- name: Extract Tomcat
+  unarchive:
+    src: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
+    dest: "{{ tomcat_home }}"
+    remote_src: yes
+    extra_opts: [--strip-components=1]
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+
+- name: Set ownership of Tomcat directory
+  file:
+    path: "{{ tomcat_home }}"
+    state: directory
+    recurse: yes
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+
+- name: Set execute permissions on Tomcat bin scripts
+  file:
+    path: "{{ tomcat_home }}/bin"
+    state: directory
+    recurse: yes
+    mode: '0755'
+
+- name: Configure tomcat-users.xml
+  template:
+    src: tomcat-users.xml.j2
+    dest: "{{ tomcat_home }}/conf/tomcat-users.xml"
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+    mode: '0600'
+  notify: Restart Tomcat
+
+- name: Configure manager context.xml to allow remote access
+  template:
+    src: manager-context.xml.j2
+    dest: "{{ tomcat_home }}/webapps/manager/META-INF/context.xml"
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+    mode: '0644'
+  notify: Restart Tomcat
+
+- name: Configure host-manager context.xml to allow remote access
+  template:
+    src: manager-context.xml.j2
+    dest: "{{ tomcat_home }}/webapps/host-manager/META-INF/context.xml"
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+    mode: '0644'
+  notify: Restart Tomcat
+
+- name: Create Tomcat systemd service
+  template:
+    src: tomcat.service.j2
+    dest: /etc/systemd/system/tomcat.service
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Restart Tomcat
+
+- name: Start and enable Tomcat service
+  systemd:
+    name: tomcat
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Wait for Tomcat to start
+  wait_for:
+    port: "{{ tomcat_port }}"
+    delay: 5
+    timeout: 60
+
+# SSH configuration for Jenkins deployment
+- name: Ensure ec2-user SSH directory exists
+  file:
+    path: /home/ec2-user/.ssh
+    state: directory
+    owner: ec2-user
+    group: ec2-user
+    mode: '0700'
+
+- name: Add Jenkins public key to authorized_keys (if provided)
+  authorized_key:
+    user: ec2-user
+    key: "{{ jenkins_public_key }}"
+    state: present
+  when: jenkins_public_key | length > 0
+
+# Create deployment directory with proper permissions
+- name: Ensure webapps directory has correct permissions
+  file:
+    path: "{{ tomcat_home }}/webapps"
+    state: directory
+    owner: "{{ tomcat_user }}"
+    group: "{{ tomcat_group }}"
+    mode: '0775'
+
+- name: Add ec2-user to tomcat group for deployment
+  user:
+    name: ec2-user
+    groups: "{{ tomcat_group }}"
+    append: yes

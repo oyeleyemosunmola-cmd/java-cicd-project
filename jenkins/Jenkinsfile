@@ -1,0 +1,146 @@
+pipeline {
+    agent any
+
+    environment {
+        // Tomcat server configuration
+        TOMCAT_HOST = credentials('tomcat-host')  // Store Tomcat IP in Jenkins credentials
+        TOMCAT_USER = 'ec2-user'
+        TOMCAT_WEBAPPS = '/opt/tomcat/webapps'
+
+        // Application configuration
+        APP_NAME = 'java-web-app'
+        WAR_FILE = 'target/*.war'
+
+        // Maven configuration
+        MAVEN_HOME = '/opt/maven'
+        PATH = "${MAVEN_HOME}/bin:${env.PATH}"
+    }
+
+    tools {
+        maven 'Maven-3.9'  // Configure this in Jenkins Global Tool Configuration
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code from GitHub...'
+                git branch: 'master',
+                    url: 'https://github.com/LondheShubham153/simple-java-docker.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo 'Building WAR file with Maven...'
+                sh '''
+                    mvn clean package -DskipTests
+                '''
+            }
+            post {
+                success {
+                    echo 'Build successful! WAR file created.'
+                    archiveArtifacts artifacts: 'target/*.war', fingerprint: true
+                }
+                failure {
+                    echo 'Build failed!'
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                echo 'Running unit tests...'
+                sh 'mvn test'
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+
+        stage('Deploy to Tomcat') {
+            steps {
+                echo 'Deploying WAR to Tomcat server...'
+
+                // Using SSH credentials stored in Jenkins
+                sshagent(credentials: ['tomcat-ssh-key']) {
+                    sh '''
+                        # Find the WAR file
+                        WAR_PATH=$(ls target/*.war | head -1)
+                        WAR_NAME=$(basename $WAR_PATH)
+
+                        echo "Deploying $WAR_NAME to Tomcat server at $TOMCAT_HOST"
+
+                        # Stop Tomcat (graceful shutdown)
+                        ssh -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                            'sudo systemctl stop tomcat || true'
+
+                        # Backup existing WAR (if exists)
+                        ssh -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                            "if [ -f ${TOMCAT_WEBAPPS}/${WAR_NAME} ]; then sudo mv ${TOMCAT_WEBAPPS}/${WAR_NAME} ${TOMCAT_WEBAPPS}/${WAR_NAME}.bak; fi"
+
+                        # Copy new WAR file to Tomcat
+                        scp -o StrictHostKeyChecking=no $WAR_PATH \
+                            ${TOMCAT_USER}@${TOMCAT_HOST}:/tmp/
+
+                        # Move WAR to webapps with correct permissions
+                        ssh -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                            "sudo mv /tmp/$WAR_NAME ${TOMCAT_WEBAPPS}/ && sudo chown tomcat:tomcat ${TOMCAT_WEBAPPS}/$WAR_NAME"
+
+                        # Start Tomcat
+                        ssh -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                            'sudo systemctl start tomcat'
+
+                        echo "Deployment complete!"
+                    '''
+                }
+            }
+        }
+
+        stage('Health Check') {
+            steps {
+                echo 'Performing health check...'
+                script {
+                    // Wait for Tomcat to start
+                    sleep(time: 15, unit: 'SECONDS')
+
+                    // Check if application is accessible
+                    sshagent(credentials: ['tomcat-ssh-key']) {
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ${TOMCAT_USER}@${TOMCAT_HOST} \
+                                'curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/' | grep -q "200\\|302"
+
+                            if [ $? -eq 0 ]; then
+                                echo "Health check passed! Application is running."
+                            else
+                                echo "Health check failed! Application may not be accessible."
+                                exit 1
+                            fi
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Pipeline execution completed.'
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline succeeded! Application deployed successfully.'
+        }
+        failure {
+            echo 'Pipeline failed! Check logs for details.'
+        }
+    }
+}

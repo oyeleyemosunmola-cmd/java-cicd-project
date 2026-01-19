@@ -1,0 +1,13 @@
+---
+# Jenkins role defaults
+jenkins_http_port: 8080
+jenkins_home: /var/lib/jenkins
+jenkins_user: jenkins
+jenkins_group: jenkins
+
+# Maven configuration
+maven_version: "3.9.6"
+maven_home: "/opt/maven"
+
+# SSH configuration for deployment
+jenkins_ssh_key_path: "{{ jenkins_home }}/.ssh"

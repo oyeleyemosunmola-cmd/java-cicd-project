@@ -1,0 +1,48 @@
+---
+# Common tasks for all servers
+
+- name: Update all packages
+  yum:
+    name: "*"
+    state: latest
+    update_cache: yes
+
+- name: Install essential packages
+  yum:
+    name:
+      - git
+      - wget
+      - curl
+      - vim
+      - unzip
+      - net-tools
+      - htop
+      - tree
+    state: present
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone | default('UTC') }}"
+
+- name: Ensure NTP is installed and running
+  yum:
+    name: chrony
+    state: present
+
+- name: Start and enable chronyd service
+  systemd:
+    name: chronyd
+    state: started
+    enabled: yes
+
+- name: Configure system limits
+  pam_limits:
+    domain: "*"
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop:
+    - { type: 'soft', item: 'nofile', value: '65536' }
+    - { type: 'hard', item: 'nofile', value: '65536' }
+    - { type: 'soft', item: 'nproc', value: '65536' }
+    - { type: 'hard', item: 'nproc', value: '65536' }
